@@ -1,3 +1,4 @@
+
 import streamlit as st
 from datetime import datetime, timedelta
 from gmail.gmail_utils import get_unread_emails, send_email
@@ -12,11 +13,11 @@ from auth.google_auth import login, get_gmail_service
 # ---------------------------------------------------
 # CONFIG
 # ---------------------------------------------------
-st.set_page_config(page_title="AI Gmail Assistant", layout="wide")
-st.title("AI Gmail Assistant")
+st.set_page_config(page_title="InboxIQ", layout="wide")
+st.title("📬 InboxIQ — AI Email Assistant")
 
 # ---------------------------------------------------
-# AUTH (FIXED)
+# AUTH
 # ---------------------------------------------------
 if "credentials" not in st.session_state:
     st.session_state["credentials"] = login()
@@ -25,19 +26,29 @@ credentials = st.session_state["credentials"]
 service = get_gmail_service(credentials)
 
 # ---------------------------------------------------
-# LOAD EMAILS (SAFE CACHE)
+# LOAD EMAILS (LAZY + CACHE)
 # ---------------------------------------------------
 @st.cache_data(ttl=60)
 def load_emails(token):
     svc = get_gmail_service(credentials)
     return get_unread_emails(svc)
 
-emails = load_emails(credentials.token)
+# session storage
+if "emails" not in st.session_state:
+    st.session_state["emails"] = []
+
+st.info("Click below to fetch your inbox")
+
+if st.button("📥 Load Emails"):
+    with st.spinner("Fetching emails..."):
+        st.session_state["emails"] = load_emails(credentials.token)
+
+emails = st.session_state["emails"]
 
 # ---------------------------------------------------
 # COMPOSE EMAIL
 # ---------------------------------------------------
-st.header("Compose Email")
+st.header("✉️ Compose Email")
 
 compose_to = st.text_input("To")
 compose_subject = st.text_input("Subject")
@@ -58,12 +69,14 @@ st.divider()
 # ---------------------------------------------------
 # CLASSIFICATION
 # ---------------------------------------------------
-classified_emails = process_inbox(emails)
+classified_emails = process_inbox(emails) if emails else []
 
 # ---------------------------------------------------
 # INBOX
 # ---------------------------------------------------
-if not classified_emails:
+if not emails:
+    st.warning("No emails loaded yet.")
+elif not classified_emails:
     st.info("No unread emails found.")
 else:
     for email in classified_emails:
@@ -82,7 +95,6 @@ else:
         st.write("Label:", email.get("label"))
         st.write("Confidence:", round(confidence, 2))
 
-        # 🔥 SHOW BODY (IMPORTANT)
         with st.expander("View Email Body"):
             st.write(email["body"][:1000])
 
@@ -103,7 +115,6 @@ else:
             if st.button("Save Feedback", key=f"save_{email['id']}"):
                 save_feedback(email, correct_label)
 
-                # ⚠️ FIX: prevent multiple retrain spam
                 if "retraining" not in st.session_state:
                     st.session_state["retraining"] = True
                     subprocess.Popen(["python", "retrain.py"])
