@@ -1,0 +1,14 @@
+streamlit
+fastapi
+uvicorn
+google-genai
+google-api-python-client
+google-auth
+google-auth-oauthlib
+python-dotenv
+torch
+pandas
+numpy
+nltk
+scikit-learn
+joblib
