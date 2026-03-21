@@ -90,8 +90,8 @@ def normalize_label(label):
 
 def process_inbox(email_list):
 
-    final_results = []
-    seen = set()   # dedup
+    results = []
+    seen = set()
 
     for email in email_list:
 
@@ -102,32 +102,10 @@ def process_inbox(email_list):
 
         if unique_id in seen:
             continue
-
         seen.add(unique_id)
 
-        text = email["subject"] + " " + email["body"]
-
         # -------------------------------
-        # 1. SEMANTIC MEMORY
-        # -------------------------------
-        semantic_match = find_similar(email["subject"], email["sender"])
-
-        if semantic_match:
-            email["label"] = semantic_match["label"]
-            email["priority"] = semantic_match["priority"]
-            final_results.append(email)
-            continue
-
-        # -------------------------------
-        # 2. SPAM FILTER
-        # -------------------------------
-        spam_prob = predict_spam(text)
-
-        if spam_prob > 0.9:
-            continue  # hide spam
-
-        # -------------------------------
-        # 3. ML CLASSIFIER (MAIN)
+        # ML CLASSIFIER
         # -------------------------------
         label = predict_email(
             email["subject"],
@@ -135,18 +113,20 @@ def process_inbox(email_list):
             email["body"]
         )
 
-        label = normalize_label(label)
-
         # -------------------------------
-        # 4. RULE OVERRIDES
+        # RULE OVERRIDE (ALWAYS STRONG)
         # -------------------------------
-        rule = rule_engine(email["sender"], email["subject"], email["body"])
+        rule = rule_engine(
+            email["sender"],
+            email["subject"],
+            email["body"]
+        )
 
-        if rule and label not in ["security", "notification"]:
+        if rule:
             label = rule["label"]
 
         # -------------------------------
-        # 5. PRIORITY
+        # PRIORITY
         # -------------------------------
         priority = priority_rules(
             email["subject"],
@@ -157,14 +137,12 @@ def process_inbox(email_list):
 
         email["label"] = label
         email["priority"] = priority
-
-        final_results.append(email)
-
-    # add reply field
-    for email in final_results:
         email["reply"] = ""
 
-    return final_results
+        results.append(email)
+
+    return results
+
 
 
 # --------------------------------------------------
