@@ -1,59 +1,37 @@
-import torch
-from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification
+import joblib
 import os
 
-MODEL_DIR = "model_bert"
+MODEL_PATH = "model/email_model.pkl"
+VECTORIZER_PATH = "model/vectorizer.pkl"
 
-tokenizer = None
 model = None
+vectorizer = None
 
-if os.path.exists(MODEL_DIR):
-    tokenizer = DistilBertTokenizerFast.from_pretrained(MODEL_DIR)
-    model = DistilBertForSequenceClassification.from_pretrained(MODEL_DIR)
-    model.eval()
+if os.path.exists(MODEL_PATH) and os.path.exists(VECTORIZER_PATH):
+    model = joblib.load(MODEL_PATH)
+    vectorizer = joblib.load(VECTORIZER_PATH)
 
 
-def rule_override(subject, sender, body):
-    s = sender.lower()
-    text = (subject + " " + body).lower()
+def predict_email(subject, sender, body):
 
-    if "github" in s:
-        return "notification"
+    if model is None or vectorizer is None:
+        return "general"
 
-    if "unsubscribe" in text:
-        return "newsletter"
+    text = f"{subject} {sender} {body}"
+    X = vectorizer.transform([text])
 
-    if any(w in text for w in ["internship", "hiring", "apply"]):
-        return "job_alert"
-
-    return None
+    return model.predict(X)[0]
 
 
 def predict_with_confidence(subject, sender, body):
 
-    if model is None:
+    if model is None or vectorizer is None:
         return "general", 0.5
 
     text = f"{subject} {sender} {body}"
+    X = vectorizer.transform([text])
 
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
-    outputs = model(**inputs)
+    probs = model.predict_proba(X)[0]
+    pred = model.classes_[probs.argmax()]
 
-    probs = torch.nn.functional.softmax(outputs.logits, dim=1)[0]
-    pred_id = torch.argmax(probs).item()
-
-    confidence = probs[pred_id].item()
-
-    label = model.config.id2label[pred_id]
-
-    # apply rule only if strong
-    rule = rule_override(subject, sender, body)
-    if rule:
-        return rule, 0.95
-
-    return label, confidence
-
-
-def predict_email(subject, sender, body):
-    label, _ = predict_with_confidence(subject, sender, body)
-    return label
+    return pred, max(probs)
