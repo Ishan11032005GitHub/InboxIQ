@@ -2,11 +2,11 @@ import streamlit as st
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 import os
+import json
+import tempfile
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
-CLIENT_SECRETS_FILE = "client_secret.json"
-REDIRECT_URI = "http://localhost:8501"
-
+REDIRECT_URI = os.getenv("REDIRECT_URI", "http://localhost:8501")
 TOKEN_FILE = "token.json"
 
 
@@ -29,23 +29,40 @@ def load_credentials():
     return None
 
 
-def login():
+def _get_client_secrets_file():
+    client_secret_json = os.getenv("GOOGLE_CLIENT_SECRET_JSON")
 
+    if not client_secret_json:
+        raise ValueError(
+            "Missing GOOGLE_CLIENT_SECRET_JSON environment variable."
+        )
+
+    data = json.loads(client_secret_json)
+
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+    json.dump(data, tmp)
+    tmp.flush()
+    tmp.close()
+
+    return tmp.name
+
+
+def login():
     creds = load_credentials()
     if creds and creds.valid:
         return creds
 
     query_params = st.query_params
+    client_secrets_file = _get_client_secrets_file()
 
     if "code" in query_params:
-
         if "code_verifier" not in st.session_state:
             st.warning("Session lost. Restarting login...")
             st.query_params.clear()
             st.rerun()
 
         flow = Flow.from_client_secrets_file(
-            CLIENT_SECRETS_FILE,
+            client_secrets_file,
             scopes=SCOPES,
             redirect_uri=REDIRECT_URI
         )
@@ -64,13 +81,12 @@ def login():
         st.rerun()
 
     flow = Flow.from_client_secrets_file(
-        CLIENT_SECRETS_FILE,
+        client_secrets_file,
         scopes=SCOPES,
         redirect_uri=REDIRECT_URI
     )
 
     auth_url, _ = flow.authorization_url(prompt="consent")
-
     st.session_state["code_verifier"] = flow.code_verifier
 
     st.markdown(f"### 🔐 [Login with Google]({auth_url})")
