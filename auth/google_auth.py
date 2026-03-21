@@ -6,7 +6,7 @@ import json
 import tempfile
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
-REDIRECT_URI = os.getenv("REDIRECT_URI", "http://localhost:8501")
+REDIRECT_URI = os.getenv("REDIRECT_URI", "https://inboxiq-edvu.onrender.com/")
 TOKEN_FILE = "token.json"
 
 
