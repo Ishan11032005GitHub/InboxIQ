@@ -1,20 +1,19 @@
-
 import streamlit as st
-from datetime import datetime, timedelta
-from gmail.gmail_utils import get_unread_emails, send_email
 import subprocess
 
-from automation.scheduler import schedule_email
+from gmail.gmail_utils import get_unread_emails, send_email
 from ai.gemini_utils import process_inbox, generate_reply
 from ai.classifier import predict_with_confidence
 from memory.feedback_store import save_feedback
 from auth.google_auth import login, get_gmail_service
+
 
 # ---------------------------------------------------
 # CONFIG
 # ---------------------------------------------------
 st.set_page_config(page_title="InboxIQ", layout="wide")
 st.title("📬 InboxIQ — AI Email Assistant")
+
 
 # ---------------------------------------------------
 # AUTH
@@ -25,25 +24,36 @@ if "credentials" not in st.session_state:
 credentials = st.session_state["credentials"]
 service = get_gmail_service(credentials)
 
+
 # ---------------------------------------------------
 # LOAD EMAILS (LAZY + CACHE)
 # ---------------------------------------------------
 @st.cache_data(ttl=60)
-def load_emails(token):
+def load_emails(_token: str):
     svc = get_gmail_service(credentials)
     return get_unread_emails(svc)
 
-# session storage
+
 if "emails" not in st.session_state:
     st.session_state["emails"] = []
 
-st.info("Click below to fetch your inbox")
+st.info("Click below to fetch your inbox.")
 
-if st.button("📥 Load Emails"):
-    with st.spinner("Fetching emails..."):
-        st.session_state["emails"] = load_emails(credentials.token)
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    if st.button("📥 Load Emails"):
+        with st.spinner("Fetching emails..."):
+            st.session_state["emails"] = load_emails(credentials.token)
+
+with col2:
+    if st.button("🔄 Refresh Inbox"):
+        load_emails.clear()
+        with st.spinner("Refreshing emails..."):
+            st.session_state["emails"] = load_emails(credentials.token)
 
 emails = st.session_state["emails"]
+
 
 # ---------------------------------------------------
 # COMPOSE EMAIL
@@ -58,18 +68,20 @@ if st.button("Send Email"):
     if compose_to and compose_subject and compose_body:
         try:
             send_email(service, compose_to, compose_subject, compose_body)
-            st.success("Email Sent")
+            st.success("Email sent.")
         except Exception as e:
-            st.error(f"Send failed: {str(e)}")
+            st.error(f"Send failed: {e}")
     else:
-        st.warning("Fill all fields")
+        st.warning("Fill all fields.")
 
 st.divider()
+
 
 # ---------------------------------------------------
 # CLASSIFICATION
 # ---------------------------------------------------
 classified_emails = process_inbox(emails) if emails else []
+
 
 # ---------------------------------------------------
 # INBOX
@@ -80,23 +92,23 @@ elif not classified_emails:
     st.info("No unread emails found.")
 else:
     for email in classified_emails:
+        email_id = email.get("id", f"{email.get('subject', '')}_{email.get('sender', '')}")
+        reply_key = f"reply_{email_id}"
+        feedback_key = f"feedback_{email_id}"
 
-        reply_key = f"reply_{email['id']}"
-        feedback_key = f"feedback_{email['id']}"
+        subject = email.get("subject", "(No Subject)")
+        sender = email.get("sender", "(Unknown Sender)")
+        body = email.get("body", "")
 
-        label, confidence = predict_with_confidence(
-            email["subject"],
-            email["sender"],
-            email["body"]
-        )
+        label, confidence = predict_with_confidence(subject, sender, body)
 
-        st.subheader(email["subject"])
-        st.write("From:", email["sender"])
-        st.write("Label:", email.get("label"))
-        st.write("Confidence:", round(confidence, 2))
+        st.subheader(subject)
+        st.write("From:", sender)
+        st.write("Label:", email.get("label", label))
+        st.write("Confidence:", round(float(confidence), 2))
 
         with st.expander("View Email Body"):
-            st.write(email["body"][:1000])
+            st.write(body[:1000] if body else "(Empty body)")
 
         # -------------------------
         # FEEDBACK
@@ -105,21 +117,32 @@ else:
             correct_label = st.selectbox(
                 "Correct Label",
                 [
-                    "job_alert", "promotion", "newsletter",
-                    "event_invite", "notification",
-                    "work", "security", "general"
+                    "job_alert",
+                    "promotion",
+                    "newsletter",
+                    "event_invite",
+                    "notification",
+                    "work",
+                    "security",
+                    "general",
                 ],
-                key=feedback_key
+                key=feedback_key,
             )
 
-            if st.button("Save Feedback", key=f"save_{email['id']}"):
-                save_feedback(email, correct_label)
+            if st.button("Save Feedback", key=f"save_{email_id}"):
+                try:
+                    save_feedback(email, correct_label)
 
-                if "retraining" not in st.session_state:
-                    st.session_state["retraining"] = True
-                    subprocess.Popen(["python", "retrain.py"])
+                    if "retraining" not in st.session_state:
+                        st.session_state["retraining"] = True
+                        try:
+                            subprocess.Popen(["python", "retrain.py"])
+                        except Exception:
+                            pass
 
-                st.success("Feedback saved. Model updating...")
+                    st.success("Feedback saved. Model updating...")
+                except Exception as e:
+                    st.error(f"Saving feedback failed: {e}")
 
         # -------------------------
         # REPLY
@@ -127,24 +150,30 @@ else:
         if reply_key not in st.session_state:
             st.session_state[reply_key] = ""
 
-        st.text_area("Reply", key=reply_key)
+        st.text_area("Reply", key=reply_key, height=150)
 
-        col1, col2 = st.columns(2)
+        c1, c2 = st.columns(2)
 
-        with col1:
-            if st.button("Generate Reply", key=email["id"] + "gen"):
-                reply = generate_reply(email, "professional")
-                st.session_state[reply_key] = reply
-                st.rerun()
+        with c1:
+            if st.button("Generate Reply", key=f"{email_id}_gen"):
+                try:
+                    reply = generate_reply(email, "professional")
+                    st.session_state[reply_key] = reply
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Reply generation failed: {e}")
 
-        with col2:
-            if st.button("Send Reply", key=email["id"] + "send"):
-                send_email(
-                    service,
-                    email["sender"],
-                    email["subject"],
-                    st.session_state[reply_key]
-                )
-                st.success("Sent")
+        with c2:
+            if st.button("Send Reply", key=f"{email_id}_send"):
+                try:
+                    send_email(
+                        service,
+                        sender,
+                        f"Re: {subject}" if subject else "Re:",
+                        st.session_state[reply_key],
+                    )
+                    st.success("Sent.")
+                except Exception as e:
+                    st.error(f"Send failed: {e}")
 
         st.divider()
