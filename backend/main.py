@@ -1,7 +1,8 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-
+from fastapi import Cookie
+from typing import Optional
 from auth.google_auth import (
     get_authorization_data,
     exchange_code_for_credentials,
@@ -61,7 +62,7 @@ def callback(request: Request, code_verifier: str = Cookie(None)):
 
     creds = exchange_code_for_credentials(code, state, code_verifier)
 
-    return RedirectResponse("https://inbox-iq-xi.vercel.app/")
+    return RedirectResponse("https://inbox-iq-xi.vercel.app")
 
 
 # -----------------------------
