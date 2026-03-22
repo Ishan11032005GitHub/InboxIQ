@@ -10,10 +10,10 @@ from auth.google_auth import (
     load_credentials
 )
 
-from gmail.gmail_utils import get_unread_emails, send_email
-from ai.gemini_utils import process_inbox, generate_reply
-from ai.classifier import predict_with_confidence
-from memory.feedback_store import save_feedback
+from backend.gmail.gmail_utils import get_unread_emails, send_email
+from backend.ai.gemini_utils import process_inbox, generate_reply
+from backend.ai.classifier import predict_with_confidence
+from backend.memory.feedback_store import save_feedback
 
 app = FastAPI()
 
