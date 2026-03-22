@@ -1,8 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import Cookie
-from typing import Optional
+
 from backend.auth.google_auth import (
     get_authorization_data,
     exchange_code_for_credentials,
@@ -18,7 +17,7 @@ from backend.memory.feedback_store import save_feedback
 app = FastAPI()
 
 # -----------------------------
-# CORS (ALLOW FRONTEND)
+# CORS
 # -----------------------------
 app.add_middleware(
     CORSMiddleware,
@@ -29,10 +28,10 @@ app.add_middleware(
 )
 
 # -----------------------------
-# TEMP STORAGE (IN-MEMORY)
+# TEMP STORAGE
 # -----------------------------
-oauth_store = {} # state -> code_verifier
-email_cache = {} # id -> email
+oauth_store = {}   # state -> code_verifier
+email_cache = {}   # id -> email
 
 
 # -----------------------------
@@ -42,25 +41,34 @@ email_cache = {} # id -> email
 def login():
     data = get_authorization_data()
 
-    response = RedirectResponse(data["auth_url"])
-    response.set_cookie("code_verifier", data["code_verifier"])
+    # ✅ STORE state → code_verifier
+    oauth_store[data["state"]] = data["code_verifier"]
 
-    return response
+    return RedirectResponse(data["auth_url"])
 
 
 # -----------------------------
 # AUTH CALLBACK
 # -----------------------------
 @app.get("/auth/callback")
-def callback(request: Request, code_verifier: str = Cookie(None)):
+def callback(request: Request):
 
     code = request.query_params.get("code")
     state = request.query_params.get("state")
 
-    if not code or not code_verifier:
+    code_verifier = oauth_store.get(state)
+
+    if not code or not state or not code_verifier:
         raise HTTPException(400, "Missing OAuth data")
 
-    creds = exchange_code_for_credentials(code, state, code_verifier)
+    try:
+        creds = exchange_code_for_credentials(code, state, code_verifier)
+    except Exception as e:
+        print("🔥 OAuth ERROR:", str(e))
+        raise HTTPException(500, f"OAuth failed: {str(e)}")
+
+    # Optional: clean used state
+    oauth_store.pop(state, None)
 
     return RedirectResponse("https://inbox-iq-xi.vercel.app")
 
@@ -80,7 +88,6 @@ def get_emails():
     emails = get_unread_emails(service)
     emails = process_inbox(emails)
 
-    # attach confidence + cache
     result = []
 
     for e in emails:
@@ -158,6 +165,7 @@ async def feedback(request: Request):
 
     return {"status": "saved"}
 
+
 @app.get("/")
 def root():
-    return {"status": "ok", "message": "Welcome to the Inbox IQ API"}
+    return {"status": "ok", "message": "Welcome to Inbox IQ API"}

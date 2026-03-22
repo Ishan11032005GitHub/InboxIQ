@@ -1,9 +1,10 @@
-const API = "https://inboxiq-9p2y.onrender.com"; // CHANGE THIS
+const API = "https://inboxiq-9p2y.onrender.com"; // KEEP THIS
 
 // ----------------------
 // LOGIN
 // ----------------------
 document.getElementById("loginBtn").onclick = () => {
+    // No change needed, just redirect
     window.location.href = `${API}/auth/login`;
 };
 
@@ -11,9 +12,22 @@ document.getElementById("loginBtn").onclick = () => {
 // LOAD EMAILS
 // ----------------------
 document.getElementById("loadEmails").onclick = async () => {
-    const res = await fetch(`${API}/emails`);
-    const data = await res.json();
-    renderEmails(data);
+    try {
+        const res = await fetch(`${API}/emails`);
+
+        if (!res.ok) {
+            const err = await res.json();
+            alert(err.detail || "Failed to load emails");
+            return;
+        }
+
+        const data = await res.json();
+        renderEmails(data);
+
+    } catch (err) {
+        console.error(err);
+        alert("Server error while loading emails");
+    }
 };
 
 // ----------------------
@@ -24,13 +38,25 @@ document.getElementById("sendEmail").onclick = async () => {
     const subject = document.getElementById("subject").value;
     const body = document.getElementById("body").value;
 
-    await fetch(`${API}/send-email`, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ to, subject, body })
-    });
+    try {
+        const res = await fetch(`${API}/send-email`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ to, subject, body })
+        });
 
-    alert("Email sent");
+        if (!res.ok) {
+            const err = await res.json();
+            alert(err.detail || "Failed to send email");
+            return;
+        }
+
+        alert("Email sent");
+
+    } catch (err) {
+        console.error(err);
+        alert("Server error while sending email");
+    }
 };
 
 // ----------------------
@@ -82,14 +108,26 @@ function renderEmails(emails) {
 // GENERATE REPLY
 // ----------------------
 async function generateReply(id) {
-    const res = await fetch(`${API}/generate-reply`, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ id })
-    });
+    try {
+        const res = await fetch(`${API}/generate-reply`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ id })
+        });
 
-    const data = await res.json();
-    document.getElementById(`reply-${id}`).value = data.reply;
+        if (!res.ok) {
+            const err = await res.json();
+            alert(err.detail || "Failed to generate reply");
+            return;
+        }
+
+        const data = await res.json();
+        document.getElementById(`reply-${id}`).value = data.reply;
+
+    } catch (err) {
+        console.error(err);
+        alert("Server error while generating reply");
+    }
 }
 
 // ----------------------
@@ -98,17 +136,29 @@ async function generateReply(id) {
 async function sendReply(id, sender, subject) {
     const reply = document.getElementById(`reply-${id}`).value;
 
-    await fetch(`${API}/send-email`, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            to: sender,
-            subject: "Re: " + subject,
-            body: reply
-        })
-    });
+    try {
+        const res = await fetch(`${API}/send-email`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                to: sender,
+                subject: "Re: " + subject,
+                body: reply
+            })
+        });
 
-    alert("Reply sent");
+        if (!res.ok) {
+            const err = await res.json();
+            alert(err.detail || "Failed to send reply");
+            return;
+        }
+
+        alert("Reply sent");
+
+    } catch (err) {
+        console.error(err);
+        alert("Server error while sending reply");
+    }
 }
 
 // ----------------------
@@ -117,11 +167,23 @@ async function sendReply(id, sender, subject) {
 async function saveFeedback(id) {
     const label = document.getElementById(`feedback-${id}`).value;
 
-    await fetch(`${API}/save-feedback`, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ id, label })
-    });
+    try {
+        const res = await fetch(`${API}/save-feedback`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ id, label })
+        });
 
-    alert("Feedback saved");
+        if (!res.ok) {
+            const err = await res.json();
+            alert(err.detail || "Failed to save feedback");
+            return;
+        }
+
+        alert("Feedback saved");
+
+    } catch (err) {
+        console.error(err);
+        alert("Server error while saving feedback");
+    }
 }
