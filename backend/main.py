@@ -1,7 +1,6 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import Cookie
 import os
 from backend.auth.google_auth import (
     get_authorization_data,
@@ -14,6 +13,8 @@ from backend.gmail.gmail_utils import get_unread_emails, send_email
 from backend.ai.gemini_utils import process_inbox, generate_reply
 from backend.ai.classifier import predict_with_confidence
 from backend.memory.feedback_store import save_feedback
+from fastapi import Request, HTTPException, Cookie
+from fastapi.responses import RedirectResponse
 
 app = FastAPI()
 
@@ -41,8 +42,17 @@ email_cache = {}   # id -> email
 @app.get("/auth/login")
 def login():
     data = get_authorization_data()
-    response = RedirectResponse(data["auth_url"])
-    response.set_cookie("code_verifier", data["code_verifier"], httponly=True, samesite="lax", secure=True)
+
+    response = RedirectResponse(url=data["auth_url"], status_code=302)
+    response.set_cookie(
+        key="code_verifier",
+        value=data["code_verifier"],
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=600,
+        path="/"
+    )
     return response
 
 
@@ -73,8 +83,8 @@ def callback(request: Request, code_verifier: str = Cookie(default=None)):
     if not frontend_url:
         raise HTTPException(status_code=500, detail="FRONTEND_URL not set")
 
-    response = RedirectResponse(frontend_url)
-    response.delete_cookie("code_verifier")
+    response = RedirectResponse(frontend_url, status_code=302)
+    response.delete_cookie("code_verifier", path="/")
     return response
 
 
