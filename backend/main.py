@@ -157,3 +157,7 @@ async def feedback(request: Request):
     save_feedback(email_cache[email_id], label)
 
     return {"status": "saved"}
+
+@app.get("/")
+def root():
+    return {"status": "ok", "message": "Welcome to the Inbox IQ API"}
