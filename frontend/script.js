@@ -1,4 +1,4 @@
-const API = "https://your-backend-url.onrender.com"; // CHANGE THIS
+const API = "https://inboxiq-9p2y.onrender.com"; // CHANGE THIS
 
 // ----------------------
 // LOGIN
