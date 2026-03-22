@@ -1,7 +1,8 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
-
+from fastapi import Cookie
+import os
 from backend.auth.google_auth import (
     get_authorization_data,
     exchange_code_for_credentials,
