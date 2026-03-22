@@ -1,16 +1,21 @@
+import hashlib
 import json
 import os
-import hashlib
+from typing import Dict, List
 
 FEEDBACK_FILE = "data/feedback.json"
 
 
-def _hash_email(email):
-    text = f"{email['subject']}_{email['sender']}_{email['body']}"
+def _ensure_dir():
+    os.makedirs(os.path.dirname(FEEDBACK_FILE), exist_ok=True)
+
+
+def _hash_email(email: Dict[str, str]) -> str:
+    text = f"{email.get('subject', '')}_{email.get('sender', '')}_{email.get('body', '')}"
     return hashlib.md5(text.encode()).hexdigest()
 
 
-def load_feedback():
+def load_feedback() -> List[Dict[str, str]]:
     if not os.path.exists(FEEDBACK_FILE):
         return []
 
@@ -18,13 +23,11 @@ def load_feedback():
         return json.load(f)
 
 
-def save_feedback(email, correct_label):
-
+def save_feedback(email: Dict[str, str], correct_label: str) -> None:
+    _ensure_dir()
     data = load_feedback()
-
     email_id = _hash_email(email)
 
-    # avoid duplicates
     for item in data:
         if item["id"] == email_id:
             item["label"] = correct_label
@@ -32,9 +35,9 @@ def save_feedback(email, correct_label):
     else:
         data.append({
             "id": email_id,
-            "subject": email["subject"],
-            "sender": email["sender"],
-            "body": email["body"],
+            "subject": email.get("subject", ""),
+            "sender": email.get("sender", ""),
+            "body": email.get("body", ""),
             "label": correct_label
         })
 

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InboxIQ</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <header>
+        <h1>📬 InboxIQ — AI Email Assistant</h1>
+    </header>
+
+    <!-- AUTH -->
+    <section class="auth">
+        <button id="loginBtn">🔐 Login with Google</button>
+    </section>
+
+    <!-- ACTIONS -->
+    <section class="actions">
+        <button id="loadEmails">📥 Load Emails</button>
+    </section>
+
+    <!-- COMPOSE -->
+    <section class="compose">
+        <h2>✉️ Compose Email</h2>
+        <input id="to" placeholder="To">
+        <input id="subject" placeholder="Subject">
+        <textarea id="body" placeholder="Email body"></textarea>
+        <button id="sendEmail">Send Email</button>
+    </section>
+
+    <!-- INBOX -->
+    <section id="inbox"></section>
+
+    <script src="script.js"></script>
+</body>
+</html>
