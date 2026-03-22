@@ -3,7 +3,7 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Cookie
 from typing import Optional
-from auth.google_auth import (
+from backend.auth.google_auth import (
     get_authorization_data,
     exchange_code_for_credentials,
     get_gmail_service,
