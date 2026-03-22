@@ -41,31 +41,27 @@ email_cache = {} # id -> email
 def login():
     data = get_authorization_data()
 
-    oauth_store[data["state"]] = data["code_verifier"]
+    response = RedirectResponse(data["auth_url"])
+    response.set_cookie("code_verifier", data["code_verifier"])
 
-    return RedirectResponse(data["auth_url"])
+    return response
 
 
 # -----------------------------
 # AUTH CALLBACK
 # -----------------------------
 @app.get("/auth/callback")
-def callback(request: Request):
+def callback(request: Request, code_verifier: str = Cookie(None)):
 
     code = request.query_params.get("code")
     state = request.query_params.get("state")
 
-    if not code or not state:
-        raise HTTPException(400, "Missing OAuth params")
-
-    code_verifier = oauth_store.get(state)
-
-    if not code_verifier:
-        raise HTTPException(400, "Invalid state")
+    if not code or not code_verifier:
+        raise HTTPException(400, "Missing OAuth data")
 
     creds = exchange_code_for_credentials(code, state, code_verifier)
 
-    return RedirectResponse("https://your-frontend-url.onrender.com")
+    return RedirectResponse("https://inbox-iq-xi.vercel.app/")
 
 
 # -----------------------------
