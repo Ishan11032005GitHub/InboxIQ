@@ -1,3 +1,4 @@
+
 import streamlit as st
 import subprocess
 
@@ -7,13 +8,11 @@ from ai.classifier import predict_with_confidence
 from memory.feedback_store import save_feedback
 from auth.google_auth import login, get_gmail_service
 
-
 # ---------------------------------------------------
 # CONFIG
 # ---------------------------------------------------
 st.set_page_config(page_title="InboxIQ", layout="wide")
 st.title("📬 InboxIQ — AI Email Assistant")
-
 
 # ---------------------------------------------------
 # AUTH
@@ -23,7 +22,6 @@ if "credentials" not in st.session_state:
 
 credentials = st.session_state["credentials"]
 service = get_gmail_service(credentials)
-
 
 # ---------------------------------------------------
 # LOAD EMAILS (LAZY + CACHE)
@@ -39,21 +37,20 @@ if "emails" not in st.session_state:
 
 st.info("Click below to fetch your inbox.")
 
-col1, col2 = st.columns([1, 1])
+c1, c2 = st.columns([1, 1])
 
-with col1:
+with c1:
     if st.button("📥 Load Emails"):
         with st.spinner("Fetching emails..."):
             st.session_state["emails"] = load_emails(credentials.token)
 
-with col2:
+with c2:
     if st.button("🔄 Refresh Inbox"):
         load_emails.clear()
         with st.spinner("Refreshing emails..."):
             st.session_state["emails"] = load_emails(credentials.token)
 
 emails = st.session_state["emails"]
-
 
 # ---------------------------------------------------
 # COMPOSE EMAIL
@@ -76,12 +73,10 @@ if st.button("Send Email"):
 
 st.divider()
 
-
 # ---------------------------------------------------
 # CLASSIFICATION
 # ---------------------------------------------------
 classified_emails = process_inbox(emails) if emails else []
-
 
 # ---------------------------------------------------
 # INBOX

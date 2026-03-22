@@ -8,10 +8,9 @@ from googleapiclient.discovery import build
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 
-# IMPORTANT:
-# This must exactly match one of the authorized redirect URIs
-# in your Google Cloud OAuth client.
-REDIRECT_URI = os.getenv("REDIRECT_URI", "https://inboxiq-edvu.onrender.com")
+# Must exactly match an authorized redirect URI in Google Cloud Console.
+# Add BOTH with and without trailing slash there to avoid stupid mismatch issues.
+REDIRECT_URI = os.getenv("REDIRECT_URI", "https://inboxiq-edvu.onrender.com/")
 TOKEN_FILE = "token.json"
 
 
@@ -47,7 +46,6 @@ def _get_client_secrets_file():
 
     data = json.loads(client_secret_json)
 
-    # Validate expected structure early
     if "web" not in data:
         raise ValueError("GOOGLE_CLIENT_SECRET_JSON must contain a top-level 'web' key.")
 
@@ -60,7 +58,7 @@ def _get_client_secrets_file():
 
 
 def login():
-    # 1. Reuse saved credentials if valid
+    # Reuse saved credentials if valid
     creds = load_credentials()
     if creds and creds.valid:
         return creds
@@ -68,12 +66,14 @@ def login():
     query_params = st.query_params
     client_secrets_file = _get_client_secrets_file()
 
-    # 2. Handle callback
+    # Debug only while fixing OAuth. Remove later if you want.
+    # st.write("DEBUG PARAMS:", dict(query_params))
+
+    # Handle OAuth callback
     if "code" in query_params:
         if "code_verifier" not in st.session_state:
-            st.warning("Session lost. Restarting login...")
-            st.query_params.clear()
-            st.rerun()
+            st.error("Session lost. Please click login again.")
+            st.stop()
 
         flow = Flow.from_client_secrets_file(
             client_secrets_file,
@@ -94,7 +94,7 @@ def login():
         st.success("✅ Login successful")
         st.rerun()
 
-    # 3. Start login flow
+    # Start OAuth flow
     flow = Flow.from_client_secrets_file(
         client_secrets_file,
         scopes=SCOPES,
@@ -108,7 +108,6 @@ def login():
     )
 
     st.session_state["code_verifier"] = flow.code_verifier
-
     st.markdown(f"### 🔐 [Login with Google]({auth_url})")
     st.stop()
 
