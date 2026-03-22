@@ -40,37 +40,41 @@ email_cache = {}   # id -> email
 @app.get("/auth/login")
 def login():
     data = get_authorization_data()
-
-    # ✅ STORE state → code_verifier
-    oauth_store[data["state"]] = data["code_verifier"]
-
-    return RedirectResponse(data["auth_url"])
+    response = RedirectResponse(data["auth_url"])
+    response.set_cookie("code_verifier", data["code_verifier"], httponly=True, samesite="lax", secure=True)
+    return response
 
 
 # -----------------------------
 # AUTH CALLBACK
 # -----------------------------
 @app.get("/auth/callback")
-def callback(request: Request):
-
+def callback(request: Request, code_verifier: str = Cookie(default=None)):
     code = request.query_params.get("code")
     state = request.query_params.get("state")
+    error = request.query_params.get("error")
 
-    code_verifier = oauth_store.get(state)
+    if error:
+        raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
 
-    if not code or not state or not code_verifier:
-        raise HTTPException(400, "Missing OAuth data")
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing code")
+
+    if not code_verifier:
+        raise HTTPException(status_code=400, detail="Missing code_verifier cookie")
 
     try:
-        creds = exchange_code_for_credentials(code, state, code_verifier)
+        exchange_code_for_credentials(code, state, code_verifier)
     except Exception as e:
-        print("🔥 OAuth ERROR:", str(e))
-        raise HTTPException(500, f"OAuth failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"OAuth failed: {str(e)}")
 
-    # Optional: clean used state
-    oauth_store.pop(state, None)
+    frontend_url = os.getenv("FRONTEND_URL")
+    if not frontend_url:
+        raise HTTPException(status_code=500, detail="FRONTEND_URL not set")
 
-    return RedirectResponse(os.getenv("FRONTEND_URL", "https://inbox-iq-xi.vercel.app"))
+    response = RedirectResponse(frontend_url)
+    response.delete_cookie("code_verifier")
+    return response
 
 
 # -----------------------------
