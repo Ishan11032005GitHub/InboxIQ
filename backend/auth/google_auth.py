@@ -1,24 +1,20 @@
-import json
 import os
-from typing import Optional
-from urllib.parse import urlencode
-
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
-REDIRECT_URI = os.getenv("REDIRECT_URI", "https://inboxiq-edvu.onrender.com/auth/callback")
+REDIRECT_URI = os.getenv("REDIRECT_URI")
 TOKEN_FILE = "token.json"
 
 
-def save_credentials(creds: Credentials) -> None:
+def save_credentials(creds):
     with open(TOKEN_FILE, "w") as f:
         f.write(creds.to_json())
 
 
-def load_credentials() -> Optional[Credentials]:
+def load_credentials():
     if not os.path.exists(TOKEN_FILE):
         return None
 
@@ -34,19 +30,26 @@ def load_credentials() -> Optional[Credentials]:
     return creds
 
 
-def get_client_config() -> dict:
-    client_secret_json = os.getenv("GOOGLE_CLIENT_SECRET_JSON")
-    if not client_secret_json:
-        raise ValueError("Missing GOOGLE_CLIENT_SECRET_JSON environment variable.")
+def get_client_config():
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
 
-    data = json.loads(client_secret_json)
-    if "web" not in data:
-        raise ValueError("GOOGLE_CLIENT_SECRET_JSON must contain top-level 'web' key.")
+    if not client_id or not client_secret or not REDIRECT_URI:
+        raise ValueError("Missing GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / REDIRECT_URI")
 
-    return data
+    return {
+        "web": {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "redirect_uris": [REDIRECT_URI],
+        }
+    }
 
 
-def create_flow(state: Optional[str] = None, code_verifier: Optional[str] = None) -> Flow:
+def create_flow(state=None, code_verifier=None):
     flow = Flow.from_client_config(
         get_client_config(),
         scopes=SCOPES,
@@ -78,7 +81,7 @@ def get_authorization_data():
     }
 
 
-def exchange_code_for_credentials(code: str, state: Optional[str], code_verifier: str) -> Credentials:
+def exchange_code_for_credentials(code, state, code_verifier):
     flow = create_flow(state=state, code_verifier=code_verifier)
     flow.fetch_token(code=code)
     creds = flow.credentials
@@ -86,12 +89,5 @@ def exchange_code_for_credentials(code: str, state: Optional[str], code_verifier
     return creds
 
 
-def get_gmail_service(credentials: Credentials):
+def get_gmail_service(credentials):
     return build("gmail", "v1", credentials=credentials)
-
-
-def get_saved_service():
-    creds = load_credentials()
-    if not creds:
-        raise Exception("Login required first.")
-    return build("gmail", "v1", credentials=creds)

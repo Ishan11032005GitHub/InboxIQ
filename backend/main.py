@@ -70,7 +70,7 @@ def callback(request: Request):
     # Optional: clean used state
     oauth_store.pop(state, None)
 
-    return RedirectResponse("https://inbox-iq-xi.vercel.app")
+    return RedirectResponse(os.getenv("FRONTEND_URL", "https://inbox-iq-xi.vercel.app"))
 
 
 # -----------------------------
