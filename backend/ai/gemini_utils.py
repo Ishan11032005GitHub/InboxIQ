@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from dotenv import load_dotenv
 from google import genai
 
-from ai.classifier import predict_email
+from backend.ai.classifier import predict_email
 
 load_dotenv()
 
