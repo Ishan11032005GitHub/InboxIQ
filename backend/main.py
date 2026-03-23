@@ -162,6 +162,23 @@ async def send(request: Request):
 
     return {"status": "sent"}
 
+@app.get("/auth/status")
+def auth_status():
+    creds = load_credentials()
+    return {"authenticated": creds is not None}
+
+
+@app.post("/auth/logout")
+def logout():
+    import os
+
+    token_file = "token.json"
+    if os.path.exists(token_file):
+        os.remove(token_file)
+
+    response = JSONResponse({"status": "logged_out"})
+    response.delete_cookie("code_verifier", path="/")
+    return response
 
 # -----------------------------
 # SAVE FEEDBACK
