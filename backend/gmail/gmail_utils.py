@@ -80,59 +80,64 @@ def _extract_body_from_payload(payload: Dict[str, Any]) -> str:
     return ""
 
 
-def get_unread_emails(service) -> List[Dict[str, str]]:
-    all_messages = []
-    next_page_token = None
+def get_unread_emails(service, max_results=5, page_token=None):
+    results = service.users().messages().list(
+        userId='me',
+        labelIds=['INBOX', 'UNREAD'],
+        maxResults=max_results,
+        pageToken=page_token
+    ).execute()
 
-    while True:
-        response = service.users().messages().list(
-            userId="me",
-            labelIds=["INBOX"],
-            q="is:unread",
-            maxResults=100,
-            pageToken=next_page_token
+    messages = results.get('messages', [])
+    next_page_token = results.get('nextPageToken')
+
+    emails = []
+
+    for msg in messages:
+        msg_data = service.users().messages().get(
+            userId='me',
+            id=msg['id'],
+            format='full'
         ).execute()
 
-        messages = response.get("messages", [])
-        all_messages.extend(messages)
-
-        next_page_token = response.get("nextPageToken")
-        if not next_page_token:
-            break
-
-    emails: List[Dict[str, str]] = []
-
-    for msg in all_messages:
-        message = service.users().messages().get(
-            userId="me",
-            id=msg["id"],
-            format="full"
-        ).execute()
-
-        headers = message.get("payload", {}).get("headers", [])
+        headers = msg_data['payload'].get('headers', [])
 
         subject = ""
         sender = ""
 
         for h in headers:
-            name = h.get("name", "")
-            value = h.get("value", "")
-            if name == "Subject":
-                subject = value
-            elif name == "From":
-                sender = value
+            if h['name'] == 'Subject':
+                subject = h['value']
+            elif h['name'] == 'From':
+                sender = h['value']
 
-        body = _extract_body_from_payload(message.get("payload", {}))
+        body = ""
+
+        if 'parts' in msg_data['payload']:
+            for part in msg_data['payload']['parts']:
+                if part['mimeType'] == 'text/plain':
+                    data = part['body'].get('data')
+                    if data:
+                        import base64
+                        body = base64.urlsafe_b64decode(data).decode('utf-8')
+                        break
+        else:
+            data = msg_data['payload']['body'].get('data')
+            if data:
+                import base64
+                body = base64.urlsafe_b64decode(data).decode('utf-8')
 
         emails.append({
-            "id": msg["id"],
-            "threadId": message.get("threadId", ""),
+            "id": msg['id'],
             "subject": subject,
             "sender": sender,
-            "body": body
+            "body": body[:2000]
         })
 
-    return emails
+    return {
+        "emails": emails,
+        "next_page_token": next_page_token
+    }
 
 
 def send_email(service, to: str, subject: str, body: str) -> None:
