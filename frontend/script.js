@@ -15,6 +15,13 @@ const authMessage = document.getElementById("authMessage");
 const appContent = document.getElementById("appContent");
 
 // ----------------------
+// PAGINATION STATE
+// ----------------------
+let nextPageToken = null;
+let isLoadingEmails = false;
+let hasStartedLoading = false;
+
+// ----------------------
 // AUTH
 // ----------------------
 loginBtn.onclick = () => {
@@ -31,7 +38,7 @@ logoutBtn.onclick = async () => {
     if (!res.ok) throw new Error("Logout failed");
 
     updateAuthUI(false);
-    inbox.innerHTML = "";
+    resetInbox();
     showStatus("Logged out successfully");
   } catch (err) {
     showStatus(err.message);
@@ -53,7 +60,7 @@ async function checkAuthStatus() {
     }
 
     const data = await res.json();
-    updateAuthUI(data.authenticated);
+    updateAuthUI(!!data.authenticated);
   } catch {
     updateAuthUI(false);
   }
@@ -74,26 +81,78 @@ function updateAuthUI(isAuthenticated) {
 }
 
 // ----------------------
-// LOAD EMAILS
+// LOAD EMAILS PROGRESSIVELY
 // ----------------------
 loadEmailsBtn.onclick = async () => {
-  try {
-    showStatus("Loading emails...");
+  resetInbox();
+  hasStartedLoading = true;
+  await loadNextBatch();
+};
 
-    const res = await fetch(`${API}/emails`, {
+async function loadNextBatch() {
+  if (isLoadingEmails) return;
+
+  isLoadingEmails = true;
+  showStatus("Loading emails...");
+
+  try {
+    let url = `${API}/emails?limit=5`;
+    if (nextPageToken) {
+      url += `&page_token=${encodeURIComponent(nextPageToken)}`;
+    }
+
+    const res = await fetch(url, {
       credentials: "include"
     });
 
-    if (!res.ok) throw new Error("Failed to load emails");
+    const data = await res.json().catch(() => ({}));
 
-    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || "Failed to load emails");
+    }
 
-    renderEmails(data);
-    showStatus(`${data.length} email(s) loaded`);
+    const emails = data.emails || [];
+
+    if (!emails.length && !nextPageToken) {
+      inbox.innerHTML = `
+        <div class="card" style="padding:20px;">
+          <p style="margin:0;color:#94a3b8;">No unread emails found</p>
+        </div>
+      `;
+      showStatus("No unread emails found");
+      isLoadingEmails = false;
+      return;
+    }
+
+    appendEmails(emails);
+
+    nextPageToken = data.next_page_token || null;
+
+    if (nextPageToken) {
+      showStatus("Loaded current batch...");
+      setTimeout(() => {
+        isLoadingEmails = false;
+        loadNextBatch();
+      }, 250);
+      return;
+    }
+
+    showStatus("All unread emails loaded");
   } catch (err) {
     showStatus(err.message);
+  } finally {
+    if (!nextPageToken) {
+      isLoadingEmails = false;
+    }
   }
-};
+}
+
+function resetInbox() {
+  inbox.innerHTML = "";
+  nextPageToken = null;
+  isLoadingEmails = false;
+  hasStartedLoading = false;
+}
 
 // ----------------------
 // SEND EMAIL
@@ -116,15 +175,15 @@ sendEmailBtn.onclick = async () => {
       body: JSON.stringify({ to, subject, body })
     });
 
-    if (!res.ok) throw new Error("Failed to send email");
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) throw new Error(data.detail || "Failed to send email");
 
     showStatus("Email sent");
 
-    // reset
     document.getElementById("to").value = "";
     document.getElementById("subject").value = "";
     document.getElementById("body").value = "";
-
   } catch (err) {
     showStatus(err.message);
   }
@@ -133,18 +192,7 @@ sendEmailBtn.onclick = async () => {
 // ----------------------
 // RENDER EMAILS
 // ----------------------
-function renderEmails(emails) {
-  inbox.innerHTML = "";
-
-  if (!emails || emails.length === 0) {
-    inbox.innerHTML = `
-      <div class="card" style="padding:20px;">
-        <p style="margin:0;color:#94a3b8;">No unread emails found</p>
-      </div>
-    `;
-    return;
-  }
-
+function appendEmails(emails) {
   emails.forEach(email => {
     const div = document.createElement("div");
     div.className = "email-card";
@@ -155,12 +203,10 @@ function renderEmails(emails) {
     const label = escapeHtml(email.label || "general");
     const id = escapeAttr(email.id || "");
 
-    const trimmedBody =
-      body.length > 1200 ? body.slice(0, 1200) + "..." : body;
+    const trimmedBody = body.length > 1200 ? body.slice(0, 1200) + "..." : body;
 
     div.innerHTML = `
       <div class="email-main">
-
         <div class="email-top">
           <div>
             <h3 class="email-subject">${subject}</h3>
@@ -189,7 +235,6 @@ function renderEmails(emails) {
             </button>
           </div>
         </div>
-
       </div>
     `;
 
@@ -211,15 +256,14 @@ async function generateReply(id) {
       body: JSON.stringify({ id })
     });
 
-    if (!res.ok) throw new Error("Reply generation failed");
+    const data = await res.json().catch(() => ({}));
 
-    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Reply generation failed");
 
     const box = document.getElementById(`reply-${id}`);
     if (box) box.value = data.reply || "";
 
     showStatus("Reply generated");
-
   } catch (err) {
     showStatus(err.message);
   }
@@ -249,10 +293,11 @@ async function sendReply(id, sender, subject) {
       })
     });
 
-    if (!res.ok) throw new Error("Failed to send reply");
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) throw new Error(data.detail || "Failed to send reply");
 
     showStatus("Reply sent");
-
   } catch (err) {
     showStatus(err.message);
   }

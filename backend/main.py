@@ -123,14 +123,23 @@ def logout():
 # GET EMAILS
 # -----------------------------
 @app.get("/emails")
-def get_emails():
+def get_emails(limit: int = 5, page_token: str | None = None):
     creds = load_credentials()
     if not creds:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
         service = get_gmail_service(creds)
-        emails = get_unread_emails(service)
+
+        payload = get_unread_emails(
+            service,
+            max_results=limit,
+            page_token=page_token
+        )
+
+        emails = payload["emails"]
+        next_page_token = payload.get("next_page_token")
+
         emails = process_inbox(emails)
 
         result = []
@@ -138,7 +147,10 @@ def get_emails():
             email_cache[email["id"]] = email
             result.append(email)
 
-        return result
+        return {
+            "emails": result,
+            "next_page_token": next_page_token
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load emails: {str(e)}")
