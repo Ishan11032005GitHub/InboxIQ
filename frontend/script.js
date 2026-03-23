@@ -19,7 +19,7 @@ const appContent = document.getElementById("appContent");
 // ----------------------
 let nextPageToken = null;
 let isLoadingEmails = false;
-let hasStartedLoading = false;
+let emailStore = {};
 
 // ----------------------
 // AUTH
@@ -85,7 +85,7 @@ function updateAuthUI(isAuthenticated) {
 // ----------------------
 loadEmailsBtn.onclick = async () => {
   resetInbox();
-  hasStartedLoading = true;
+  showLoadingCard();
   await loadNextBatch();
 };
 
@@ -111,12 +111,14 @@ async function loadNextBatch() {
       throw new Error(data.detail || "Failed to load emails");
     }
 
+    removeLoadingCard();
+
     const emails = data.emails || [];
 
     if (!emails.length && !nextPageToken) {
       inbox.innerHTML = `
-        <div class="card" style="padding:20px;">
-          <p style="margin:0;color:#94a3b8;">No unread emails found</p>
+        <div class="card loading-card">
+          No unread emails found
         </div>
       `;
       showStatus("No unread emails found");
@@ -130,6 +132,7 @@ async function loadNextBatch() {
 
     if (nextPageToken) {
       showStatus("Loaded current batch...");
+      showLoadingCard("Loading more emails...");
       setTimeout(() => {
         isLoadingEmails = false;
         loadNextBatch();
@@ -138,12 +141,11 @@ async function loadNextBatch() {
     }
 
     showStatus("All unread emails loaded");
+    isLoadingEmails = false;
   } catch (err) {
+    removeLoadingCard();
     showStatus(err.message);
-  } finally {
-    if (!nextPageToken) {
-      isLoadingEmails = false;
-    }
+    isLoadingEmails = false;
   }
 }
 
@@ -151,7 +153,23 @@ function resetInbox() {
   inbox.innerHTML = "";
   nextPageToken = null;
   isLoadingEmails = false;
-  hasStartedLoading = false;
+  emailStore = {};
+}
+
+function showLoadingCard(message = "Loading emails...") {
+  removeLoadingCard();
+
+  const div = document.createElement("div");
+  div.className = "card loading-card";
+  div.id = "loadingCard";
+  div.textContent = message;
+
+  inbox.appendChild(div);
+}
+
+function removeLoadingCard() {
+  const card = document.getElementById("loadingCard");
+  if (card) card.remove();
 }
 
 // ----------------------
@@ -194,6 +212,8 @@ sendEmailBtn.onclick = async () => {
 // ----------------------
 function appendEmails(emails) {
   emails.forEach(email => {
+    emailStore[email.id] = email;
+
     const div = document.createElement("div");
     div.className = "email-card";
 
@@ -203,7 +223,7 @@ function appendEmails(emails) {
     const label = escapeHtml(email.label || "general");
     const id = escapeAttr(email.id || "");
 
-    const trimmedBody = body.length > 1200 ? body.slice(0, 1200) + "..." : body;
+    const trimmedBody = body.length > 300 ? body.slice(0, 300) + "..." : body;
 
     div.innerHTML = `
       <div class="email-main">
@@ -226,11 +246,11 @@ function appendEmails(emails) {
           <textarea id="reply-${id}" placeholder="Write reply..."></textarea>
 
           <div class="reply-actions">
-            <button class="btn btn-secondary" onclick="generateReply('${id}')">
+            <button class="btn btn-secondary generate-btn" data-id="${id}">
               Generate Reply
             </button>
 
-            <button class="btn btn-success" onclick="sendReply('${id}', '${jsEscape(email.sender || "")}', '${jsEscape(email.subject || "")}')">
+            <button class="btn btn-success send-btn" data-id="${id}">
               Send Reply
             </button>
           </div>
@@ -239,6 +259,26 @@ function appendEmails(emails) {
     `;
 
     inbox.appendChild(div);
+  });
+
+  bindReplyButtons();
+}
+
+function bindReplyButtons() {
+  document.querySelectorAll(".generate-btn").forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.id;
+      await generateReply(id);
+    };
+  });
+
+  document.querySelectorAll(".send-btn").forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.id;
+      const email = emailStore[id];
+      if (!email) return;
+      await sendReply(id, email.sender || "", email.subject || "");
+    };
   });
 }
 
@@ -324,15 +364,6 @@ function escapeAttr(str) {
   return String(str)
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
-}
-
-function jsEscape(str) {
-  return String(str)
-    .replace(/\\/g, "\\\\")
-    .replace(/'/g, "\\'")
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, "\\n")
-    .replace(/\r/g, "");
 }
 
 // ----------------------
