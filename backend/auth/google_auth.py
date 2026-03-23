@@ -1,4 +1,5 @@
 import os
+
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
@@ -53,7 +54,7 @@ def create_flow(state=None, code_verifier=None):
     flow = Flow.from_client_config(
         get_client_config(),
         scopes=SCOPES,
-        redirect_uri=REDIRECT_URI
+        redirect_uri=REDIRECT_URI,
     )
 
     if state:

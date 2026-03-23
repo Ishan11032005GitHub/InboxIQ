@@ -1,20 +1,18 @@
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import RedirectResponse
-from fastapi.middleware.cors import CORSMiddleware
 import os
+
+from fastapi import FastAPI, Request, HTTPException, Cookie
+from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+
 from backend.auth.google_auth import (
     get_authorization_data,
     exchange_code_for_credentials,
     get_gmail_service,
-    load_credentials
+    load_credentials,
 )
-
 from backend.gmail.gmail_utils import get_unread_emails, send_email
 from backend.ai.gemini_utils import process_inbox, generate_reply
-from backend.ai.classifier import predict_with_confidence
 from backend.memory.feedback_store import save_feedback
-from fastapi import Request, HTTPException, Cookie
-from fastapi.responses import RedirectResponse
 
 app = FastAPI()
 
@@ -32,8 +30,24 @@ app.add_middleware(
 # -----------------------------
 # TEMP STORAGE
 # -----------------------------
-oauth_store = {}   # state -> code_verifier
-email_cache = {}   # id -> email
+email_cache = {} # id -> email
+
+
+# -----------------------------
+# ROOT
+# -----------------------------
+@app.get("/")
+def root():
+    return {"status": "ok", "message": "Welcome to InboxIQ API"}
+
+
+# -----------------------------
+# AUTH STATUS
+# -----------------------------
+@app.get("/auth/status")
+def auth_status():
+    creds = load_credentials()
+    return {"authenticated": creds is not None}
 
 
 # -----------------------------
@@ -49,9 +63,9 @@ def login():
         value=data["code_verifier"],
         httponly=True,
         secure=True,
-        samesite="lax",
+        samesite="none",
         max_age=600,
-        path="/"
+        path="/",
     )
     return response
 
@@ -89,35 +103,45 @@ def callback(request: Request, code_verifier: str = Cookie(default=None)):
 
 
 # -----------------------------
+# AUTH LOGOUT
+# -----------------------------
+@app.post("/auth/logout")
+def logout():
+    token_file = "token.json"
+
+    if os.path.exists(token_file):
+        os.remove(token_file)
+
+    email_cache.clear()
+
+    response = JSONResponse({"status": "logged_out"})
+    response.delete_cookie("code_verifier", path="/")
+    return response
+
+
+# -----------------------------
 # GET EMAILS
 # -----------------------------
 @app.get("/emails")
 def get_emails():
-
     creds = load_credentials()
     if not creds:
-        raise HTTPException(401, "Not authenticated")
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
-    service = get_gmail_service(creds)
+    try:
+        service = get_gmail_service(creds)
+        emails = get_unread_emails(service)
+        emails = process_inbox(emails)
 
-    emails = get_unread_emails(service, max_results=50)
-    emails = process_inbox(emails)
+        result = []
+        for email in emails:
+            email_cache[email["id"]] = email
+            result.append(email)
 
-    result = []
+        return result
 
-    for e in emails:
-        label, conf = predict_with_confidence(
-            e["subject"],
-            e["sender"],
-            e["body"]
-        )
-
-        e["confidence"] = conf
-
-        email_cache[e["id"]] = e
-        result.append(e)
-
-    return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load emails: {str(e)}")
 
 
 # -----------------------------
@@ -125,18 +149,18 @@ def get_emails():
 # -----------------------------
 @app.post("/generate-reply")
 async def generate(request: Request):
-
     data = await request.json()
     email_id = data.get("id")
 
-    if email_id not in email_cache:
-        raise HTTPException(404, "Email not found")
+    if not email_id or email_id not in email_cache:
+        raise HTTPException(status_code=404, detail="Email not found")
 
-    email = email_cache[email_id]
-
-    reply = generate_reply(email, "professional")
-
-    return {"reply": reply}
+    try:
+        email = email_cache[email_id]
+        reply = generate_reply(email, "professional")
+        return {"reply": reply}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Reply generation failed: {str(e)}")
 
 
 # -----------------------------
@@ -144,60 +168,44 @@ async def generate(request: Request):
 # -----------------------------
 @app.post("/send-email")
 async def send(request: Request):
-
     creds = load_credentials()
     if not creds:
-        raise HTTPException(401, "Not authenticated")
-
-    service = get_gmail_service(creds)
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
     data = await request.json()
 
-    send_email(
-        service,
-        data["to"],
-        data["subject"],
-        data["body"]
-    )
+    to = data.get("to", "").strip()
+    subject = data.get("subject", "").strip()
+    body = data.get("body", "").strip()
 
-    return {"status": "sent"}
+    if not to or not subject or not body:
+        raise HTTPException(status_code=400, detail="Missing to / subject / body")
 
-@app.get("/auth/status")
-def auth_status():
-    creds = load_credentials()
-    return {"authenticated": creds is not None}
+    try:
+        service = get_gmail_service(creds)
+        send_email(service, to, subject, body)
+        return {"status": "sent"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Send failed: {str(e)}")
 
-
-@app.post("/auth/logout")
-def logout():
-    import os
-
-    token_file = "token.json"
-    if os.path.exists(token_file):
-        os.remove(token_file)
-
-    response = JSONResponse({"status": "logged_out"})
-    response.delete_cookie("code_verifier", path="/")
-    return response
 
 # -----------------------------
 # SAVE FEEDBACK
 # -----------------------------
 @app.post("/save-feedback")
 async def feedback(request: Request):
-
     data = await request.json()
     email_id = data.get("id")
     label = data.get("label")
 
-    if email_id not in email_cache:
-        raise HTTPException(404, "Email not found")
+    if not email_id or email_id not in email_cache:
+        raise HTTPException(status_code=404, detail="Email not found")
 
-    save_feedback(email_cache[email_id], label)
+    if not label:
+        raise HTTPException(status_code=400, detail="Missing label")
 
-    return {"status": "saved"}
-
-
-@app.get("/")
-def root():
-    return {"status": "ok", "message": "Welcome to Inbox IQ API"}
+    try:
+        save_feedback(email_cache[email_id], label)
+        return {"status": "saved"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Feedback save failed: {str(e)}")

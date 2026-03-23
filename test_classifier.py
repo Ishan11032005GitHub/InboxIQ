@@ -1,5 +1,5 @@
 import json
-from ai.classifier import predict_email
+from backend.ai.classifier import predict_email
 
 DATASET_FILE = "data/email_dataset.json"
 

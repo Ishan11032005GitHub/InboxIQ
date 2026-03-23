@@ -4,8 +4,9 @@ from functools import lru_cache
 from typing import Tuple
 
 
-MODEL_PATH = "model/email_model.pkl"
-VECTORIZER_PATH = "model/vectorizer.pkl"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_PATH = os.path.join(BASE_DIR, "model", "email_model.pkl")
+VECTORIZER_PATH = os.path.join(BASE_DIR, "model", "vectorizer.pkl")
 
 
 @lru_cache()
