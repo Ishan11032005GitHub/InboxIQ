@@ -1,51 +1,108 @@
 import base64
+import re
 from email.mime.text import MIMEText
+from html import unescape
 from typing import Any, Dict, List
 
 
-def _extract_body(payload: Dict[str, Any]) -> str:
-    body = ""
+def _decode_base64(data: str) -> str:
+    try:
+        return base64.urlsafe_b64decode(data.encode("utf-8")).decode("utf-8", errors="ignore")
+    except Exception:
+        return ""
 
+
+def _html_to_text(html: str) -> str:
+    if not html:
+        return ""
+
+    html = re.sub(r"(?is)<script.*?>.*?</script>", " ", html)
+    html = re.sub(r"(?is)<style.*?>.*?</style>", " ", html)
+    html = re.sub(r"(?i)<br\s*/?>", "\n", html)
+    html = re.sub(r"(?i)</p>", "\n", html)
+    html = re.sub(r"(?i)</div>", "\n", html)
+    html = re.sub(r"(?i)</li>", "\n", html)
+    html = re.sub(r"(?i)</tr>", "\n", html)
+    html = re.sub(r"(?i)</h[1-6]>", "\n", html)
+
+    html = re.sub(r"(?s)<.*?>", " ", html)
+    text = unescape(html)
+
+    text = re.sub(r"\r", "", text)
+    text = re.sub(r"\n\s*\n\s*\n+", "\n\n", text)
+    text = re.sub(r"[ \t]+", " ", text)
+
+    return text.strip()
+
+
+def _extract_body_from_payload(payload: Dict[str, Any]) -> str:
     if not payload:
-        return body
+        return ""
 
-    if payload.get("body", {}).get("data"):
-        try:
-            return base64.urlsafe_b64decode(payload["body"]["data"]).decode("utf-8", errors="ignore")
-        except Exception:
-            return ""
+    plain_text = None
+    html_text = None
 
-    for part in payload.get("parts", []) or []:
+    def walk(part: Dict[str, Any]):
+        nonlocal plain_text, html_text
+
         mime_type = part.get("mimeType", "")
-        data = part.get("body", {}).get("data")
+        body_data = part.get("body", {}).get("data")
 
-        if mime_type == "text/plain" and data:
-            try:
-                return base64.urlsafe_b64decode(data).decode("utf-8", errors="ignore")
-            except Exception:
-                continue
+        if mime_type == "text/plain" and body_data and not plain_text:
+            decoded = _decode_base64(body_data)
+            if decoded.strip():
+                plain_text = decoded
 
-        nested_parts = part.get("parts", [])
-        if nested_parts:
-            nested_body = _extract_body(part)
-            if nested_body:
-                return nested_body
+        elif mime_type == "text/html" and body_data and not html_text:
+            decoded = _decode_base64(body_data)
+            if decoded.strip():
+                html_text = decoded
 
-    return body
+        for child in part.get("parts", []) or []:
+            walk(child)
+
+    walk(payload)
+
+    if plain_text and plain_text.strip():
+        return plain_text.strip()
+
+    if html_text and html_text.strip():
+        return _html_to_text(html_text)
+
+    body_data = payload.get("body", {}).get("data")
+    if body_data:
+        decoded = _decode_base64(body_data)
+        if decoded.strip():
+            if "<html" in decoded.lower() or "<div" in decoded.lower():
+                return _html_to_text(decoded)
+            return decoded.strip()
+
+    return ""
 
 
-def get_unread_emails(service, max_results: int = 5) -> List[Dict[str, str]]:
-    results = service.users().messages().list(
-        userId="me",
-        labelIds=["INBOX"],
-        q="is:unread",
-        maxResults=max_results
-    ).execute()
+def get_unread_emails(service) -> List[Dict[str, str]]:
+    all_messages = []
+    next_page_token = None
 
-    messages = results.get("messages", [])
-    emails = []
+    while True:
+        response = service.users().messages().list(
+            userId="me",
+            labelIds=["INBOX"],
+            q="is:unread",
+            maxResults=100,
+            pageToken=next_page_token
+        ).execute()
 
-    for msg in messages:
+        messages = response.get("messages", [])
+        all_messages.extend(messages)
+
+        next_page_token = response.get("nextPageToken")
+        if not next_page_token:
+            break
+
+    emails: List[Dict[str, str]] = []
+
+    for msg in all_messages:
         message = service.users().messages().get(
             userId="me",
             id=msg["id"],
@@ -65,7 +122,7 @@ def get_unread_emails(service, max_results: int = 5) -> List[Dict[str, str]]:
             elif name == "From":
                 sender = value
 
-        body = _extract_body(message.get("payload", {}))
+        body = _extract_body_from_payload(message.get("payload", {}))
 
         emails.append({
             "id": msg["id"],

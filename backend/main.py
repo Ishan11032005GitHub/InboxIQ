@@ -100,7 +100,7 @@ def get_emails():
 
     service = get_gmail_service(creds)
 
-    emails = get_unread_emails(service)
+    emails = get_unread_emails(service, max_results=50)
     emails = process_inbox(emails)
 
     result = []

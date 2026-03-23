@@ -1,14 +1,22 @@
 const API = "https://inboxiq-9p2y.onrender.com";
 
+// ----------------------
+// ELEMENTS
+// ----------------------
 const loginBtn = document.getElementById("loginBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 const loadEmailsBtn = document.getElementById("loadEmails");
 const sendEmailBtn = document.getElementById("sendEmail");
+
 const inbox = document.getElementById("inbox");
 const statusMessage = document.getElementById("statusMessage");
+
 const authMessage = document.getElementById("authMessage");
 const appContent = document.getElementById("appContent");
 
+// ----------------------
+// AUTH
+// ----------------------
 loginBtn.onclick = () => {
   window.location.href = `${API}/auth/login`;
 };
@@ -20,68 +28,19 @@ logoutBtn.onclick = async () => {
       credentials: "include"
     });
 
-    if (!res.ok) {
-      throw new Error("Failed to logout");
-    }
+    if (!res.ok) throw new Error("Logout failed");
 
     updateAuthUI(false);
     inbox.innerHTML = "";
-    showStatus("Logged out successfully.");
+    showStatus("Logged out successfully");
   } catch (err) {
-    showStatus(`Error: ${err.message}`);
+    showStatus(err.message);
   }
 };
 
-loadEmailsBtn.onclick = async () => {
-  try {
-    showStatus("Loading emails...");
-    const res = await fetch(`${API}/emails`, {
-      credentials: "include"
-    });
-
-    if (!res.ok) {
-      throw new Error("Failed to load emails");
-    }
-
-    const data = await res.json();
-    renderEmails(data);
-    showStatus(`${data.length} email(s) loaded.`);
-  } catch (err) {
-    showStatus(`Error: ${err.message}`);
-  }
-};
-
-sendEmailBtn.onclick = async () => {
-  const to = document.getElementById("to").value.trim();
-  const subject = document.getElementById("subject").value.trim();
-  const body = document.getElementById("body").value.trim();
-
-  if (!to || !subject || !body) {
-    showStatus("Fill all compose fields.");
-    return;
-  }
-
-  try {
-    const res = await fetch(`${API}/send-email`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ to, subject, body })
-    });
-
-    if (!res.ok) {
-      throw new Error("Failed to send email");
-    }
-
-    showStatus("Email sent successfully.");
-    document.getElementById("to").value = "";
-    document.getElementById("subject").value = "";
-    document.getElementById("body").value = "";
-  } catch (err) {
-    showStatus(`Error: ${err.message}`);
-  }
-};
-
+// ----------------------
+// CHECK AUTH STATUS
+// ----------------------
 async function checkAuthStatus() {
   try {
     const res = await fetch(`${API}/auth/status`, {
@@ -94,7 +53,7 @@ async function checkAuthStatus() {
     }
 
     const data = await res.json();
-    updateAuthUI(!!data.authenticated);
+    updateAuthUI(data.authenticated);
   } catch {
     updateAuthUI(false);
   }
@@ -114,52 +73,123 @@ function updateAuthUI(isAuthenticated) {
   }
 }
 
+// ----------------------
+// LOAD EMAILS
+// ----------------------
+loadEmailsBtn.onclick = async () => {
+  try {
+    showStatus("Loading emails...");
+
+    const res = await fetch(`${API}/emails`, {
+      credentials: "include"
+    });
+
+    if (!res.ok) throw new Error("Failed to load emails");
+
+    const data = await res.json();
+
+    renderEmails(data);
+    showStatus(`${data.length} email(s) loaded`);
+  } catch (err) {
+    showStatus(err.message);
+  }
+};
+
+// ----------------------
+// SEND EMAIL
+// ----------------------
+sendEmailBtn.onclick = async () => {
+  const to = document.getElementById("to").value.trim();
+  const subject = document.getElementById("subject").value.trim();
+  const body = document.getElementById("body").value.trim();
+
+  if (!to || !subject || !body) {
+    showStatus("Fill all fields");
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API}/send-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ to, subject, body })
+    });
+
+    if (!res.ok) throw new Error("Failed to send email");
+
+    showStatus("Email sent");
+
+    // reset
+    document.getElementById("to").value = "";
+    document.getElementById("subject").value = "";
+    document.getElementById("body").value = "";
+
+  } catch (err) {
+    showStatus(err.message);
+  }
+};
+
+// ----------------------
+// RENDER EMAILS
+// ----------------------
 function renderEmails(emails) {
   inbox.innerHTML = "";
 
   if (!emails || emails.length === 0) {
     inbox.innerHTML = `
       <div class="card" style="padding:20px;">
-        <p style="margin:0;color:#94a3b8;">No unread emails found.</p>
+        <p style="margin:0;color:#94a3b8;">No unread emails found</p>
       </div>
     `;
     return;
   }
 
-  emails.forEach((email) => {
+  emails.forEach(email => {
     const div = document.createElement("div");
     div.className = "email-card";
 
-    const safeSubject = escapeHtml(email.subject || "(No Subject)");
-    const safeSender = escapeHtml(email.sender || "(Unknown Sender)");
-    const safeBody = escapeHtml(email.body || "");
-    const safeLabel = escapeHtml(email.label || "general");
-    const safeId = escapeAttribute(email.id || "");
+    const subject = escapeHtml(email.subject || "(No Subject)");
+    const sender = escapeHtml(email.sender || "(Unknown)");
+    const body = escapeHtml(email.body || "");
+    const label = escapeHtml(email.label || "general");
+    const id = escapeAttr(email.id || "");
+
+    const trimmedBody =
+      body.length > 1200 ? body.slice(0, 1200) + "..." : body;
 
     div.innerHTML = `
       <div class="email-main">
+
         <div class="email-top">
           <div>
-            <h3 class="email-subject">${safeSubject}</h3>
-            <div class="email-meta">From: ${safeSender}</div>
+            <h3 class="email-subject">${subject}</h3>
+            <div class="email-meta">From: ${sender}</div>
           </div>
-          <div class="label-chip">${safeLabel}</div>
+          <div class="label-chip">${label}</div>
         </div>
 
         <div class="email-body">
           <details>
-            <summary>View Email Body</summary>
-            <p>${safeBody}</p>
+            <summary>View Email</summary>
+            <p>${trimmedBody}</p>
           </details>
         </div>
 
         <div class="reply-box">
-          <textarea id="reply-${safeId}" placeholder="Write reply..."></textarea>
+          <textarea id="reply-${id}" placeholder="Write reply..."></textarea>
+
           <div class="reply-actions">
-            <button class="btn btn-secondary" onclick="generateReply('${safeId}')">Generate Reply</button>
-            <button class="btn btn-success" onclick="sendReply('${safeId}', '${jsEscape(email.sender || "")}', '${jsEscape(email.subject || "")}')">Send Reply</button>
+            <button class="btn btn-secondary" onclick="generateReply('${id}')">
+              Generate Reply
+            </button>
+
+            <button class="btn btn-success" onclick="sendReply('${id}', '${jsEscape(email.sender || "")}', '${jsEscape(email.subject || "")}')">
+              Send Reply
+            </button>
           </div>
         </div>
+
       </div>
     `;
 
@@ -167,9 +197,13 @@ function renderEmails(emails) {
   });
 }
 
+// ----------------------
+// GENERATE REPLY
+// ----------------------
 async function generateReply(id) {
   try {
     showStatus("Generating reply...");
+
     const res = await fetch(`${API}/generate-reply`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -177,28 +211,30 @@ async function generateReply(id) {
       body: JSON.stringify({ id })
     });
 
-    if (!res.ok) {
-      throw new Error("Failed to generate reply");
-    }
+    if (!res.ok) throw new Error("Reply generation failed");
 
     const data = await res.json();
+
     const box = document.getElementById(`reply-${id}`);
-    if (box) {
-      box.value = data.reply || "";
-    }
-    showStatus("Reply generated.");
+    if (box) box.value = data.reply || "";
+
+    showStatus("Reply generated");
+
   } catch (err) {
-    showStatus(`Error: ${err.message}`);
+    showStatus(err.message);
   }
 }
 
+// ----------------------
+// SEND REPLY
+// ----------------------
 async function sendReply(id, sender, subject) {
   try {
     const replyBox = document.getElementById(`reply-${id}`);
-    const reply = replyBox ? replyBox.value.trim() : "";
+    const reply = replyBox?.value.trim();
 
     if (!reply) {
-      showStatus("Reply is empty.");
+      showStatus("Reply is empty");
       return;
     }
 
@@ -213,18 +249,20 @@ async function sendReply(id, sender, subject) {
       })
     });
 
-    if (!res.ok) {
-      throw new Error("Failed to send reply");
-    }
+    if (!res.ok) throw new Error("Failed to send reply");
 
-    showStatus("Reply sent.");
+    showStatus("Reply sent");
+
   } catch (err) {
-    showStatus(`Error: ${err.message}`);
+    showStatus(err.message);
   }
 }
 
-function showStatus(message) {
-  statusMessage.textContent = message;
+// ----------------------
+// UTILITIES
+// ----------------------
+function showStatus(msg) {
+  statusMessage.textContent = msg;
   statusMessage.classList.remove("hidden");
 }
 
@@ -237,8 +275,10 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
-function escapeAttribute(str) {
-  return String(str).replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+function escapeAttr(str) {
+  return String(str)
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function jsEscape(str) {
@@ -250,4 +290,7 @@ function jsEscape(str) {
     .replace(/\r/g, "");
 }
 
+// ----------------------
+// INIT
+// ----------------------
 checkAuthStatus();
