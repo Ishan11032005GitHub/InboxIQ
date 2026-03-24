@@ -1,4 +1,5 @@
 import os
+import uvicorn
 
 from fastapi import FastAPI, Request, HTTPException, Cookie
 from fastapi.responses import RedirectResponse, JSONResponse
@@ -107,7 +108,7 @@ def callback(request: Request, code_verifier: str = Cookie(default=None)):
 # -----------------------------
 @app.post("/auth/logout")
 def logout():
-    token_file = "token.json"
+    token_file = os.path.join(os.path.dirname(__file__), "auth", "token.json")
 
     if os.path.exists(token_file):
         os.remove(token_file)
@@ -221,3 +222,8 @@ async def feedback(request: Request):
         return {"status": "saved"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Feedback save failed: {str(e)}")
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=port)
